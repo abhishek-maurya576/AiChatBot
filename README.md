@@ -74,13 +74,13 @@ The AI Chat Bot Agent uses a combination of:
 - Notification Access (for operation monitoring)
 
 ## Technical Documentation
-For developers interested in understanding or contributing to the project, please refer to the detailed technical documentation in the `/docs` folder.
+For developers interested in understanding or contributing to the project, please refer to the detailed technical documentation in the [`/docs`](docs) folder.
 
 ## Privacy
 This application does not collect or store any personal data beyond what is necessary for its operation. All message content is processed locally and is not transmitted to any third-party servers except for the AI processing via Google's Gemini API.
 
 ## Support
-For issues, questions, or feature requests, please open an issue in this repository or contact support at support@aichatbotagent.com
+For issues, questions, or feature requests, please open an issue in this repository or contact support at maurya972137@gmail.com.com
 
 ## License
-This project is licensed under the MIT License - see the LICENSE file for details. 
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details. 
