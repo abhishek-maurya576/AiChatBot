@@ -3,7 +3,7 @@
 ## Getting Started
 
 ### Installation
-1. Download the AI Chat Bot Agent from Google Play or directly from the APK file
+1. Download the AI Chat Bot Agent from Github or directly from the APK file
 2. Install the application following standard Android installation procedures
 3. Open the application after installation
 
