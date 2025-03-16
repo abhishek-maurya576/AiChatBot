@@ -1,6 +1,6 @@
 # Release Notes - v1.0.0
 
-## Release Date: [Current Date]
+## Release Date: Feb 14 2025
 
 We're excited to announce the initial release of AIChatBot, a modern Android chatbot application powered by Google's Gemini AI!
 
