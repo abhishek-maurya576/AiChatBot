@@ -107,8 +107,7 @@ The Eye Monitor Widget provides real-time feedback on what the AI is doing:
 
 If you encounter any issues:
 - Check the app logs for detailed error information
-- Visit our support website: support.aichatbotagent.com
-- Contact us at: support@aichatbotagent.com
+- Contact us at: maurya972137@gmail.com
 
 ## Advanced Features
 
