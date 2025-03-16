@@ -1,3 +1,4 @@
 <resources>
-    <string name="app_name">AIChatBot</string>
+    <string name="app_name">AI Chat Bot Agent</string>
+    <string name="accessibility_service_description">AI Agent needs accessibility service to automate actions in apps like sending messages or performing tasks based on your commands.</string>
 </resources>

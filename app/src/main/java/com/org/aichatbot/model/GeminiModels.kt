@@ -5,7 +5,8 @@ package com.org.aichatbot.model
  */
 data class GeminiRequest(
     val contents: List<Content>,
-    val generationConfig: GenerationConfig = GenerationConfig()
+    val generationConfig: GenerationConfig? = null,
+    val safetySettings: List<SafetySetting>? = null
 )
 
 data class Content(
@@ -17,28 +18,38 @@ data class Part(
 )
 
 data class GenerationConfig(
-    val temperature: Float = 0.7f,
-    val maxOutputTokens: Int = 800,
-    val topP: Float = 0.95f
+    val temperature: Float? = null,
+    val topK: Int? = null,
+    val topP: Float? = null,
+    val maxOutputTokens: Int? = null,
+    val stopSequences: List<String>? = null
+)
+
+data class SafetySetting(
+    val category: String,
+    val threshold: String
 )
 
 /**
  * Response model for Gemini API
  */
 data class GeminiResponse(
-    val candidates: List<Candidate> = emptyList()
+    val candidates: List<Candidate>?,
+    val promptFeedback: PromptFeedback?
 )
 
 data class Candidate(
-    val content: Content? = null,
-    val finishReason: String? = null
+    val content: Content?,
+    val finishReason: String?,
+    val index: Int?,
+    val safetyRatings: List<SafetyRating>?
 )
 
-/**
- * Models for message display in chat UI
- */
-data class ChatMessage(
-    val text: String,
-    val isUserMessage: Boolean,
-    val timestamp: Long = System.currentTimeMillis()
+data class PromptFeedback(
+    val safetyRatings: List<SafetyRating>?
+)
+
+data class SafetyRating(
+    val category: String,
+    val probability: String
 ) 

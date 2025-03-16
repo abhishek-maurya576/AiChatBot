@@ -1,69 +1,129 @@
 package com.org.aichatbot.viewmodel
 
-import android.app.Application
-import androidx.lifecycle.AndroidViewModel
+import android.util.Log
+import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.org.aichatbot.data.ChatStorage
-import com.org.aichatbot.data.GeminiService
-import com.org.aichatbot.model.*
-import kotlinx.coroutines.flow.*
-import kotlinx.coroutines.launch
+import com.google.ai.client.generativeai.GenerativeModel
+import com.google.ai.client.generativeai.type.BlockThreshold
+import com.google.ai.client.generativeai.type.HarmCategory
+import com.google.ai.client.generativeai.type.SafetySetting
+import com.google.ai.client.generativeai.type.generationConfig
+import com.org.aichatbot.model.ChatMessage
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
-import retrofit2.HttpException
-import java.io.File
-import java.net.UnknownHostException
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import okhttp3.*
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.IOException
 
-class ChatViewModel(application: Application) : AndroidViewModel(application) {
-    private val chatStorage = ChatStorage(application)
-    
+        private const val TAG = "ChatViewModel"
+
+class ChatViewModel : ViewModel() {
     private val _messages = MutableStateFlow<List<ChatMessage>>(emptyList())
     val messages: StateFlow<List<ChatMessage>> = _messages.asStateFlow()
-
-    private val _searchQuery = MutableStateFlow("")
-    val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
-
-    private val _searchResults = MutableStateFlow<List<ChatMessage>>(emptyList())
-    val searchResults: StateFlow<List<ChatMessage>> = _searchResults.asStateFlow()
-
-    private val _conversationSummary = MutableStateFlow<String?>(null)
-    val conversationSummary: StateFlow<String?> = _conversationSummary.asStateFlow()
 
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
-    private val _isReasoningMode = MutableStateFlow(false)
-    val isReasoningMode: StateFlow<Boolean> = _isReasoningMode.asStateFlow()
-
     private val _currentTypingMessage = MutableStateFlow<ChatMessage?>(null)
     val currentTypingMessage: StateFlow<ChatMessage?> = _currentTypingMessage.asStateFlow()
 
-    private val _currentCategory = MutableStateFlow("general")
-    val currentCategory: StateFlow<String> = _currentCategory.asStateFlow()
+    // Reasoning mode is enabled by default now
+    private val _isReasoningMode = MutableStateFlow(true)
+    val isReasoningMode: StateFlow<Boolean> = _isReasoningMode.asStateFlow()
 
-    private var geminiService: GeminiService? = null
-    private var isInitialized = false
-
-    init {
-        viewModelScope.launch {
-            _messages.value = chatStorage.loadMessages()
-            // Set up search
-            _searchQuery
-                .debounce(300) // Wait for 300ms of no typing
-                .distinctUntilChanged()
-                .collect { query ->
-                    if (query.isNotBlank()) {
-                        performSearch(query)
-                    } else {
-                        _searchResults.value = emptyList()
-                    }
-                }
-        }
-    }
+    private var apiKey: String = ""
+    private val client = OkHttpClient()
+    private val backupResponseGenerator = BackupResponseGenerator()
 
     fun initializeGeminiService(apiKey: String) {
-        if (!isInitialized) {
-            geminiService = GeminiService.create(apiKey)
-            isInitialized = true
+        if (apiKey.isBlank()) {
+            // If no API key is provided, fall back to simulated responses
+            simulateGeminiResponses()
+            return
+        }
+        
+        this.apiKey = apiKey
+        
+        try {
+            // No need to create model instances here, we'll use OkHttp directly
+            Log.d(TAG, "Gemini service initialized with API key")
+            
+            // Show welcome message with typing effect
+            viewModelScope.launch {
+                _isLoading.value = true
+                delay(1000) // Simulate network delay for first connection
+                _isLoading.value = false
+                
+                val welcomeMessage = ChatMessage(
+                    text = if (_isReasoningMode.value) {
+                        """
+                        🤔 Thinking: 
+                        This is the first interaction with the user. I should introduce myself properly, explain that I'm in reasoning mode, and set expectations for how I'll respond going forward.
+                        
+                        ✨ Answer: 
+                        Hello! I'm your AI assistant powered by Gemini 2.0 Flash. I'm in reasoning mode, so I'll show my thinking process for more detailed answers. How can I help you today? 👋 I was created by a sasta Android Developer called Abhishek
+                        """.trimIndent()
+                    } else {
+                        "Hello! I'm your AI assistant powered by Gemini 2.0 Flash. How can I help you today? 👋 I was created by a sasta Android Developer called Abhishek"
+                    },
+                    isUserMessage = false,
+                    timestamp = System.currentTimeMillis()
+                )
+                
+                // Simulate typing effect for welcome message
+                simulateTypingEffect(welcomeMessage)
+            }
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Error initializing Gemini service", e)
+            
+            // Show error message to user
+            viewModelScope.launch {
+                val errorMessage = ChatMessage(
+                    text = "Error initializing AI service: ${e.message}",
+                    isUserMessage = false,
+                    timestamp = System.currentTimeMillis()
+                )
+                _messages.update { currentMessages ->
+                    listOf(errorMessage) + currentMessages
+                }
+            }
+        }
+    }
+    
+    private fun simulateGeminiResponses() {
+        // Show welcome message with typing effect
+        viewModelScope.launch {
+            _isLoading.value = true
+            delay(1000) // Simulate network delay for first connection
+            _isLoading.value = false
+            
+            val welcomeMessage = ChatMessage(
+                text = if (_isReasoningMode.value) {
+                    """
+                    🤔 Thinking: 
+                    I'm in simulation mode since no API key is provided. I should let the user know I'm simulating responses while still maintaining the reasoning format structure.
+                    
+                    ✨ Answer: 
+                    Hello! I'm your AI assistant (simulation mode). I'll be showing my reasoning process for each answer. How can I help you today?
+                    """.trimIndent()
+                } else {
+                    "Hello! I'm your AI assistant (simulation mode). How can I help you today?"
+                },
+                isUserMessage = false,
+                timestamp = System.currentTimeMillis()
+            )
+            
+            // Simulate typing effect for welcome message
+            simulateTypingEffect(welcomeMessage)
         }
     }
 
@@ -71,296 +131,335 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         _isReasoningMode.value = !_isReasoningMode.value
     }
 
-    private suspend fun streamText(text: String) {
-        val words = text.split(" ")
-        var currentText = ""
-        
-        for (word in words) {
-            currentText += "$word "
-            _currentTypingMessage.value = _currentTypingMessage.value?.copy(text = currentText.trim())
-            delay(30)
-        }
-    }
-
-    private fun performSearch(query: String) {
-        val searchTerms = query.lowercase().split(" ")
-        _searchResults.value = _messages.value.filter { message ->
-            searchTerms.any { term ->
-                message.text.lowercase().contains(term)
-            }
-        }
-    }
-
-    fun updateSearchQuery(query: String) {
-        _searchQuery.value = query
-    }
-
-    fun summarizeConversation() {
-        if (_messages.value.isEmpty()) return
-
-        viewModelScope.launch {
-            try {
-                _isLoading.value = true
-                
-                val conversationText = buildSummarizationPrompt()
-                val request = GeminiRequest(
-                    contents = listOf(
-                        Content(
-                            parts = listOf(Part(text = conversationText))
-                        )
-                    )
-                )
-                
-                val response = geminiService?.generateContent(request)
-                val summary = response?.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
-                
-                if (summary != null) {
-                    _conversationSummary.value = summary
-                    // Save summary with chat history
-                    chatStorage.saveSummary(summary)
-                }
-            } catch (e: Exception) {
-                handleError("Failed to generate summary: ${e.message}")
-            } finally {
-                _isLoading.value = false
-            }
-        }
-    }
-
-    private fun buildSummarizationPrompt(): String {
-        return """
-            Please provide a concise summary of the following conversation, highlighting:
-            1. Main topics discussed
-            2. Key decisions or conclusions
-            3. Any important action items
-            
-            Conversation:
-            ${_messages.value.joinToString("\n") { 
-                "${if (it.isUserMessage) "User" else "Assistant"}: ${it.text}"
-            }}
-            
-            Summary:
-        """.trimIndent()
-    }
-
-    private fun buildConversationContext(newMessage: String): String {
-        val contextBuilder = StringBuilder()
-        
-        // Add category and any existing summary
-        if (_currentCategory.value != "general") {
-            contextBuilder.append("Category: ${_currentCategory.value}\n")
-        }
-        _conversationSummary.value?.let {
-            contextBuilder.append("Previous Discussion Summary: $it\n")
-        }
-        contextBuilder.append("\n")
-
-        // Get relevant context messages
-        val relevantMessages = getRelevantContext(newMessage)
-        
-        if (relevantMessages.isNotEmpty()) {
-            contextBuilder.append("Relevant conversation history:\n")
-            relevantMessages.forEach { message ->
-                contextBuilder.append("${if (message.isUserMessage) "User" else "Assistant"}: ${message.text}\n")
-            }
-            contextBuilder.append("\n")
-        }
-
-        contextBuilder.append("User: $newMessage\n")
-        contextBuilder.append("\nAssistant: ")
-
-        if (_isReasoningMode.value) {
-            contextBuilder.append("""
-                Please provide both reasoning and response, considering the conversation context above:
-                🤔 First, explain your thought process and reasoning.
-                ✨ Then, provide your response.
-            """.trimIndent())
-        }
-
-        return contextBuilder.toString()
-    }
-
-    private fun getRelevantContext(newMessage: String): List<ChatMessage> {
-        val allMessages = _messages.value
-        if (allMessages.isEmpty()) return emptyList()
-
-        // Always include the last 2 messages for immediate context
-        val recentContext = allMessages.takeLast(2)
-        
-        // Calculate relevance scores for messages
-        val messageScores = allMessages.map { message ->
-            val score = calculateRelevanceScore(message.text, newMessage)
-            message to score
-        }
-
-        // Get top 3 most relevant messages
-        val relevantMessages = messageScores
-            .sortedByDescending { it.second }
-            .take(3)
-            .map { it.first }
-
-        return (relevantMessages + recentContext)
-            .distinctBy { it.timestamp }
-            .sortedBy { it.timestamp }
-            .takeLast(5)
-    }
-
-    private fun calculateRelevanceScore(messageText: String, query: String): Double {
-        val messageWords = messageText.lowercase().split(" ").toSet()
-        val queryWords = query.lowercase().split(" ").toSet()
-        
-        // Calculate word overlap
-        val commonWords = messageWords.intersect(queryWords)
-        
-        // Basic relevance score based on word overlap and message length
-        return commonWords.size.toDouble() / (messageWords.size + queryWords.size).toDouble()
-    }
-
-    fun setCategory(category: String) {
-        _currentCategory.value = category
-    }
-
-    suspend fun exportCurrentChat(): File {
-        return chatStorage.exportChat(_currentCategory.value)
-    }
-
-    suspend fun importChat(file: File) {
-        _messages.value = chatStorage.importChat(file)
-    }
-
-    suspend fun getAvailableCategories(): List<String> {
-        return chatStorage.getCategories()
-    }
-
     fun sendMessage(text: String) {
         if (text.isBlank()) return
 
-        // Add user message to chat
-        val userMessage = ChatMessage(text = text, isUserMessage = true)
-        _messages.value = _messages.value + userMessage
-
-        // Send request to Gemini API
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             try {
+                // Add user message
+                    val userMessage = ChatMessage(
+                        text = text,
+                        isUserMessage = true,
+                        timestamp = System.currentTimeMillis()
+                    )
+                    
+                // Add user message immediately with animation
+                _messages.update { currentMessages ->
+                    listOf(userMessage) + currentMessages
+                }
+
+                // Show loading state
                 _isLoading.value = true
                 
-                val promptText = buildConversationContext(text)
-                
-                val request = GeminiRequest(
-                    contents = listOf(
-                        Content(
-                            parts = listOf(Part(text = promptText))
-                        )
-                    )
-                )
-                
-                val response = geminiService?.generateContent(request)
-                val aiResponse = response?.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
-                
-                if (aiResponse != null) {
-                    // Create initial empty AI message
-                    val aiMessage = ChatMessage(text = "", isUserMessage = false)
-                    _currentTypingMessage.value = aiMessage
-                    _messages.value = _messages.value + aiMessage
-
-                    // Stream the response
-                    streamText(aiResponse)
-                    
-                    // Update final message
-                    _messages.value = _messages.value.dropLast(1) + (_currentTypingMessage.value ?: aiMessage)
-                    _currentTypingMessage.value = null
-                    
-                    // Save chat history
-                    saveChatHistory()
+                // Generate response using Gemini API or fallback to simulation
+                val responseText = if (apiKey.isNotBlank()) {
+                    try {
+                        callGeminiApi(text)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Error calling Gemini API, falling back to simulated response", e)
+                        backupResponseGenerator.generateResponse(text)
+                    }
                 } else {
-                    handleError("No response from AI. Please try again.")
+                    backupResponseGenerator.generateResponse(text)
                 }
-            } catch (e: HttpException) {
-                when (e.code()) {
-                    404 -> handleError("Model not found. Please check API configuration.")
-                    401 -> handleError("Invalid API key. Please check your credentials.")
-                    429 -> handleError("Rate limit exceeded. Please try again later.")
-                    500, 502, 503, 504 -> handleError("Server error. Please try again later.")
-                    else -> handleError("Network error (${e.code()}): ${e.message()}")
-                }
-            } catch (e: UnknownHostException) {
-                handleError("No internet connection. Please check your network.")
-            } catch (e: Exception) {
-                handleError("Error: ${e.message ?: "Unknown error occurred"}")
-            } finally {
+                
+                // Hide loading
                 _isLoading.value = false
-                _currentTypingMessage.value = null
-            }
-        }
-    }
+                
+                // Create AI message
+                val aiMessage = ChatMessage(
+                    text = responseText,
+                            isUserMessage = false,
+                            timestamp = System.currentTimeMillis()
+                        )
 
-    private fun handleError(errorMessage: String) {
-        val errorChatMessage = ChatMessage(
-            text = "🚫 $errorMessage",
-            isUserMessage = false
-        )
-        _messages.value = _messages.value + errorChatMessage
-    }
-
-    fun clearChat() {
-        _messages.value = emptyList()
-        viewModelScope.launch {
-            clearChatHistory()
-        }
-    }
-
-    private fun saveChatHistory() {
-        viewModelScope.launch {
-            try {
-                val chatId = System.currentTimeMillis().toString()
-                chatStorage.saveChat(
-                    chatId = chatId,
-                    messages = _messages.value,
-                    summary = _conversationSummary.value,
-                    category = _currentCategory.value
-                )
+                // Show typing effect for AI response
+                simulateTypingEffect(aiMessage)
+                
             } catch (e: Exception) {
-                handleError("Failed to save chat: ${e.message}")
+                Log.e(TAG, "Error generating response", e)
+                _isLoading.value = false
+                
+                // Show error message with typing effect
+                val errorMessage = ChatMessage(
+                    text = "I'm sorry, something went wrong: ${e.message}. Please try again later.",
+                                    isUserMessage = false,
+                                    timestamp = System.currentTimeMillis()
+                                )
+                simulateTypingEffect(errorMessage)
             }
         }
     }
-
-    private fun clearChatHistory() {
-        viewModelScope.launch {
-            chatStorage.clearMessages()
+    
+    private suspend fun callGeminiApi(prompt: String): String {
+        return try {
+            // Create the JSON request body as per the cURL example, but add reasoning instructions
+            val jsonBody = JSONObject().apply {
+                put("contents", JSONArray().apply {
+                    put(JSONObject().apply {
+                        put("parts", JSONArray().apply {
+                            put(JSONObject().apply {
+                                // Add reasoning instructions to the prompt
+                                val promptWithReasoning = if (_isReasoningMode.value) {
+                                    """
+                                    Please provide both your reasoning process and your final answer to the following question. 
+                                    Start by showing your thought process with "🤔 Thinking:" followed by your reasoning.
+                                    Then provide your final answer with "✨ Answer:" 
+                                    
+                                    User question: $prompt
+                                    """.trimIndent()
+                                } else {
+                                    prompt
+                                }
+                                put("text", promptWithReasoning)
+                            })
+                        })
+                    })
+                })
+                
+                // Add generation configuration
+                put("generationConfig", JSONObject().apply {
+                    put("temperature", 0.7)
+                    put("topK", 40)
+                    put("topP", 0.95)
+                    put("maxOutputTokens", 1000)
+                })
+            }.toString()
+            
+            // Create the request
+            val requestBody = jsonBody.toRequestBody("application/json".toMediaTypeOrNull())
+            val request = Request.Builder()
+                .url("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=$apiKey")
+                .post(requestBody)
+                .header("Content-Type", "application/json")
+                .build()
+            
+            // Make the API call using a coroutine-friendly approach
+            val response = suspendedRequest(request)
+            
+            if (response.isSuccessful) {
+                val responseBody = response.body?.string() ?: ""
+                Log.d(TAG, "API Response: $responseBody")
+                
+                // Parse the response JSON to extract the generated text
+                val jsonResponse = JSONObject(responseBody)
+                val candidates = jsonResponse.getJSONArray("candidates")
+                
+                if (candidates.length() > 0) {
+                    val content = candidates.getJSONObject(0).getJSONObject("content")
+                    val parts = content.getJSONArray("parts")
+                    
+                    if (parts.length() > 0) {
+                        parts.getJSONObject(0).getString("text")
+                            } else {
+                        "Sorry, I couldn't generate a response from the API."
+                            }
+                        } else {
+                    "Sorry, no response was generated by the API."
+                }
+            } else {
+                val errorResponse = response.body?.string() ?: ""
+                Log.e(TAG, "API Error Response: $errorResponse")
+                "Sorry, there was an error: ${response.code} - ${response.message}"
+            }
+                    } catch (e: Exception) {
+            Log.e(TAG, "Error calling Gemini API", e)
+            throw e
+        }
+    }
+    
+    private suspend fun suspendedRequest(request: Request): Response {
+        return kotlinx.coroutines.suspendCancellableCoroutine { continuation ->
+            client.newCall(request).enqueue(object : Callback {
+                override fun onFailure(call: Call, e: IOException) {
+                    if (continuation.isActive) {
+                        continuation.resumeWith(Result.failure(e))
+                    }
+                }
+                
+                override fun onResponse(call: Call, response: Response) {
+                    if (continuation.isActive) {
+                        continuation.resumeWith(Result.success(response))
+                    }
+                }
+            })
+            
+            continuation.invokeOnCancellation {
+                client.dispatcher.executorService.shutdown()
+            }
+        }
+    }
+    
+    inner class BackupResponseGenerator {
+        fun generateResponse(query: String): String {
+            // Always include reasoning in the response
+            val withReasoning = if (_isReasoningMode.value) {
+                // If reasoning mode is enabled, add thinking section
+                true
+            } else {
+                false
+            }
+            
+            // Dictionary of canned responses for different query types
+            val responses = mapOf(
+                Regex("(?i).*help.*") to generateReasoningResponse(
+                    "I need to determine what kind of help the user is asking for. Since the query is general, I should provide a friendly and open-ended response that encourages more specific questions.",
+                    "I'm here to help! What would you like to know?"
+                ),
+                Regex("(?i).*hi|hello|hey.*") to generateReasoningResponse(
+                    "The user is greeting me, so I should respond with a warm welcome and invite them to ask questions.",
+                    "Hello there! What can I assist you with today?"
+                ),
+                Regex("(?i).*name.*") to generateReasoningResponse(
+                    "The user is asking about my identity. I should identify myself as an AI assistant to set proper expectations.",
+                    "I'm the AI Chat Bot, your friendly assistant!"
+                ),
+                Regex("(?i).*weather.*") to generateReasoningResponse(
+                    "The user is asking about weather, but I don't have real-time data or location access. I should explain this limitation and suggest alternatives.",
+                    "I don't have real-time weather data, but you can check a weather app or website for that information."
+                ),
+                Regex("(?i).*how are you.*") to generateReasoningResponse(
+                    "The user is asking about my well-being, which is a common social courtesy. I should acknowledge this while gently reminding them I'm an AI program.",
+                    "I'm just a program, but thanks for asking! How can I help you?"
+                ),
+                Regex("(?i).*thank.*") to generateReasoningResponse(
+                    "The user is expressing gratitude. I should acknowledge it politely and ask if they need further assistance.",
+                    "You're welcome! Is there anything else I can help with?"
+                ),
+                Regex("(?i).*bye.*") to generateReasoningResponse(
+                    "The user is ending the conversation. I should respond with a polite farewell that leaves the door open for future interactions.",
+                    "Goodbye! Feel free to chat again anytime you need assistance."
+                )
+            )
+            
+            // Find the first matching pattern
+            for ((pattern, response) in responses) {
+                if (pattern.containsMatchIn(query)) {
+                    return response
+                }
+            }
+            
+            // Default responses if no pattern matches
+            val defaultThinking = listOf(
+                "I need to consider what the user is asking about \"$query\". Since it doesn't match my common patterns, I should give a thoughtful but somewhat general response that encourages more details.",
+                "This query about \"$query\" requires me to think carefully. Without specific context, I should be helpful while acknowledging limitations.",
+                "For this question about \"$query\", I should consider what information would be most useful. Without specifics, an open-ended response is best."
+            )
+            
+            val defaultAnswers = listOf(
+                "That's an interesting question. Can you tell me more about what you're looking for?",
+                "I understand you're asking about \"$query\". Could you provide more details?",
+                "I'd be happy to help with that. Could you elaborate a bit more?",
+                "I'm still learning, but I'll try my best to assist with your question about \"$query\".",
+                "Thanks for your question. Let me know if you need specific information about \"$query\"."
+            )
+            
+            return generateReasoningResponse(
+                defaultThinking.random(),
+                defaultAnswers.random()
+            )
+        }
+        
+        private fun generateReasoningResponse(thinking: String, answer: String): String {
+            return if (_isReasoningMode.value) {
+                """
+                🤔 Thinking: $thinking
+                
+                ✨ Answer: $answer
+                """.trimIndent()
+            } else {
+                answer
+            }
         }
     }
 
     fun startNewChat() {
         viewModelScope.launch {
-            // Save current chat if not empty
-            if (_messages.value.isNotEmpty()) {
-                saveChatHistory()
-            }
+            // Show visual feedback for new chat
+            _isLoading.value = true
+            delay(500)
             
-            // Clear current messages
+            // Clear messages
             _messages.value = emptyList()
             _currentTypingMessage.value = null
-            _conversationSummary.value = null
             
-            // Reset category to general
-            _currentCategory.value = "general"
+            // Hide loading
+            _isLoading.value = false
+            
+            // Show welcome message with typing effect after a short delay
+            delay(500)
+            
+            // Create a proper reasoning-formatted welcome message
+            val welcomeMessage = ChatMessage(
+                text = if (_isReasoningMode.value) {
+                    """
+                    🤔 Thinking: 
+                    This is a new chat session, so I should introduce myself properly and explain that I'm in reasoning mode. I want to be welcoming and set expectations about how my responses will be structured.
+                    
+                    ✨ Answer: 
+                    Hello! I'm your AI assistant powered by Gemini 2.0 Flash. I'm in reasoning mode, so I'll show my thinking process for more detailed answers. How can I help you today?
+                    """.trimIndent()
+                } else {
+                    "How can I help you today?"
+                },
+                isUserMessage = false,
+                timestamp = System.currentTimeMillis()
+            )
+            
+            // Simulate typing effect for welcome message
+            simulateTypingEffect(welcomeMessage)
         }
     }
-
-    fun loadPreviousChat(chatId: String) {
-        viewModelScope.launch {
-            try {
-                _isLoading.value = true
-                val previousChat = chatStorage.loadChatById(chatId)
-                _messages.value = previousChat.messages
-                _conversationSummary.value = previousChat.summary
-                _currentCategory.value = previousChat.category
-            } catch (e: Exception) {
-                handleError("Failed to load chat: ${e.message}")
-            } finally {
-                _isLoading.value = false
+    
+    private suspend fun simulateTypingEffect(message: ChatMessage) {
+        // Get original message text
+        val originalText = message.text
+        
+        // Break message into visible chunks with typing effect
+        _currentTypingMessage.value = ChatMessage(
+            text = "",
+            isUserMessage = message.isUserMessage,
+            timestamp = message.timestamp
+        )
+        
+        // For short messages, type character by character
+        if (originalText.length < 50) {
+            for (i in originalText.indices) {
+                // Update typing indicator with more text
+                _currentTypingMessage.update { current ->
+                    current?.copy(text = originalText.substring(0, i + 1))
+                }
+                
+                // Random delay for natural typing appearance
+                delay((30L..80L).random())
+            }
+        } 
+        // For longer messages, type word by word
+        else {
+            val words = originalText.split(" ")
+            var currentText = ""
+            
+            for (word in words) {
+                currentText += if (currentText.isEmpty()) word else " $word"
+                
+                // Update typing indicator with more text
+                _currentTypingMessage.update { current ->
+                    current?.copy(text = currentText)
+                }
+                
+                // Random delay for natural typing appearance
+                delay((70L..150L).random())
             }
         }
+        
+        // Small pause at the end to make it feel more natural
+        delay(200)
+        
+        // Add the full message to the list and remove typing indicator
+        _messages.update { currentMessages ->
+            listOf(message) + currentMessages
+        }
+        
+        _currentTypingMessage.value = null
     }
-} 
+}

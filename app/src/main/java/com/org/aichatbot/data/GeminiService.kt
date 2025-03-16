@@ -4,11 +4,13 @@ import com.org.aichatbot.model.GeminiRequest
 import com.org.aichatbot.model.GeminiResponse
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
+import retrofit2.Response
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.http.Body
 import retrofit2.http.Headers
 import retrofit2.http.POST
+import java.util.concurrent.TimeUnit
 
 interface GeminiService {
     @Headers(
@@ -17,7 +19,7 @@ interface GeminiService {
     @POST("v1beta/models/gemini-2.0-flash:generateContent")
     suspend fun generateContent(
         @Body request: GeminiRequest
-    ): GeminiResponse
+    ): Response<GeminiResponse>
 
     companion object {
         private const val BASE_URL = "https://generativelanguage.googleapis.com/"
@@ -39,6 +41,9 @@ interface GeminiService {
                     chain.proceed(request)
                 }
                 .addInterceptor(loggingInterceptor)
+                .connectTimeout(30, TimeUnit.SECONDS)
+                .readTimeout(30, TimeUnit.SECONDS)
+                .writeTimeout(30, TimeUnit.SECONDS)
                 .build()
                 
             return Retrofit.Builder()
@@ -49,4 +54,4 @@ interface GeminiService {
                 .create(GeminiService::class.java)
         }
     }
-} 
+}

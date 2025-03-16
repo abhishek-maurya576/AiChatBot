@@ -1,7 +1,11 @@
 package com.org.aichatbot.ui.screens
 
+import android.util.Log
 import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -15,23 +19,29 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.org.aichatbot.model.ChatMessage
 import com.org.aichatbot.viewmodel.ChatViewModel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
 
-@OptIn(ExperimentalMaterial3Api::class)
+private const val TAG = "ChatScreen"
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalAnimationApi::class)
 @Composable
 fun ChatScreen(
     viewModel: ChatViewModel = viewModel(),
-    apiKey: String
+    apiKey: String,
+    onBackToHome: () -> Unit
 ) {
     LaunchedEffect(Unit) {
         viewModel.initializeGeminiService(apiKey)
@@ -39,193 +49,385 @@ fun ChatScreen(
 
     val messages by viewModel.messages.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
-    val isReasoningMode by viewModel.isReasoningMode.collectAsState()
     val currentTypingMessage by viewModel.currentTypingMessage.collectAsState()
     var messageText by remember { mutableStateOf("") }
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
-    var showSearch by remember { mutableStateOf(false) }
-    val searchQuery by viewModel.searchQuery.collectAsState()
-    val searchResults by viewModel.searchResults.collectAsState()
+    val density = LocalDensity.current
+    
+    // Dialog state for history
+    var showHistoryDialog by remember { mutableStateOf(false) }
+
+    // Sound and haptic feedback for touch interactions
+    val interactionSource = remember { MutableInteractionSource() }
+
+    // Animated welcome text
+    var showWelcomeMessage by remember { mutableStateOf(true) }
+    LaunchedEffect(Unit) {
+        delay(3000)
+        showWelcomeMessage = false
+    }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+            .background(Color.White)
     ) {
-        // Top App Bar
+        // Top App Bar with animation
         TopAppBar(
-            title = { Text("AI Chat Assistant") },
+            title = { 
+                Text("Chat Bot")
+            },
             colors = TopAppBarDefaults.topAppBarColors(
-                containerColor = MaterialTheme.colorScheme.primaryContainer,
-                titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                containerColor = Color(0xFF26A69A),
+                titleContentColor = Color.White,
+                navigationIconContentColor = Color.White
             ),
-            actions = {
-                // Search Icon Button
-                IconButton(onClick = { showSearch = !showSearch }) {
-                    Icon(
-                        imageVector = if (showSearch) Icons.Default.Close else Icons.Default.Search,
-                        contentDescription = if (showSearch) "Close Search" else "Open Search"
-                    )
-                }
-                
-                // Reasoning Mode Toggle
-                IconToggleButton(
-                    checked = isReasoningMode,
-                    onCheckedChange = { viewModel.toggleReasoningMode() }
+            navigationIcon = {
+                IconButton(
+                    onClick = onBackToHome,
+                    modifier = Modifier.scale(1f)
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Info,
-                        contentDescription = "Toggle Reasoning Mode",
-                        tint = if (isReasoningMode) 
-                            MaterialTheme.colorScheme.secondary 
-                        else 
-                            LocalContentColor.current
+                        imageVector = Icons.Default.ArrowBack,
+                        contentDescription = "Back"
                     )
                 }
-                
-                // New Chat Button
-                IconButton(onClick = { viewModel.startNewChat() }) {
+            },
+            actions = {
+                IconButton(
+                    onClick = { viewModel.startNewChat() }
+                ) {
                     Icon(
                         imageVector = Icons.Default.Add,
-                        contentDescription = "New Chat"
+                        contentDescription = "New chat",
+                        tint = Color.White
+                    )
+                }
+                IconButton(onClick = { showHistoryDialog = true }) {
+                    Icon(
+                        imageVector = Icons.Default.History,
+                        contentDescription = "History",
+                        tint = Color.White
                     )
                 }
             }
         )
 
-        // Search Bar
-        AnimatedVisibility(
-            visible = showSearch,
-            enter = expandVertically() + fadeIn(),
-            exit = shrinkVertically() + fadeOut()
+        // Messages list with animation
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .background(Color.White)
         ) {
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = { viewModel.updateSearchQuery(it) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(8.dp),
-                placeholder = { Text("Search messages...") },
-                leadingIcon = { Icon(Icons.Default.Search, "Search") },
-                singleLine = true,
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedContainerColor = MaterialTheme.colorScheme.surface,
-                    unfocusedContainerColor = MaterialTheme.colorScheme.surface
-                )
-            )
-        }
-
-        // Reasoning mode indicator
-        if (isReasoningMode) {
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f),
-                tonalElevation = 1.dp
-            ) {
-                Row(
-                    modifier = Modifier
-                        .padding(8.dp)
-                        .fillMaxWidth(),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
+            if (messages.isEmpty() && !isLoading && currentTypingMessage == null) {
+                // Empty state with animation
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Info,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Reasoning Mode Active",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primary
-                    )
+                    if (showWelcomeMessage) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "👋 Welcome to Chat Bot!",
+                                color = Color(0xFF26A69A),
+                                fontSize = 20.sp,
+                                modifier = Modifier.padding(bottom = 8.dp)
+                            )
+                            Text(
+                                text = "Send a message to start chatting",
+                                color = Color.Gray
+                            )
+                        }
+                    } else {
+                        Text(
+                            text = "Send a message to start chatting",
+                            color = Color.Gray
+                        )
+                    }
                 }
-            }
-        }
-
-        // Messages list
-        Box(modifier = Modifier.weight(1f)) {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                reverseLayout = true,
-                state = listState
-            ) {
-                val displayMessages = if (searchQuery.isNotBlank()) searchResults else messages
-                items(displayMessages.asReversed()) { message ->
-                    MessageBubble(message)
-                }
-            }
-            
-            // Loading Indicator
-            if (isLoading) {
-                CircularProgressIndicator(
+            } else {
+                LazyColumn(
                     modifier = Modifier
-                        .align(Alignment.Center)
-                        .size(48.dp)
-                )
+                        .fillMaxSize()
+                        .padding(horizontal = 8.dp),
+                    reverseLayout = true,
+                    state = listState,
+                    contentPadding = PaddingValues(vertical = 8.dp)
+                ) {
+                    // Show typing indicator with animation
+                    if (currentTypingMessage != null) {
+                        item(key = "typing") {
+                            TypingIndicator(message = currentTypingMessage!!)
+                            Spacer(modifier = Modifier.height(8.dp))
+                        }
+                    }
+                    
+                    // Show messages with animations
+                    items(
+                        items = messages,
+                        key = { message -> "${message.timestamp}_${message.isUserMessage}_${message.text.hashCode()}" }
+                    ) { message ->
+                        AnimatedMessageBubble(message = message)
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+                }
+            }
+
+            // Loading Indicator with animation
+            if (isLoading) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.White.copy(alpha = 0.7f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        CircularProgressIndicator(
+                            color = Color(0xFF26A69A),
+                            modifier = Modifier.size(48.dp)
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        PulsatingText(text = "Thinking...")
+                    }
+                }
             }
         }
 
-        LaunchedEffect(messages.size, currentTypingMessage) {
-            if (messages.isNotEmpty() || currentTypingMessage != null) {
-                listState.animateScrollToItem(
-                    if (currentTypingMessage != null) messages.size else messages.size - 1
-                )
-            }
-        }
-
-        // Message input
+        // Message input with animations
         Surface(
             modifier = Modifier.fillMaxWidth(),
-            tonalElevation = 2.dp,
-            color = MaterialTheme.colorScheme.surface
+            color = Color.White,
+            shadowElevation = 4.dp
         ) {
             Row(
                 modifier = Modifier
-                    .padding(16.dp)
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
                     .fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                // Message input field with animation
                 OutlinedTextField(
                     value = messageText,
                     onValueChange = { messageText = it },
                     modifier = Modifier
                         .weight(1f)
                         .padding(end = 8.dp),
-                    placeholder = { Text("Type a message...") },
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                        focusedBorderColor = Color.Transparent,
-                        unfocusedBorderColor = Color.Transparent
-                    ),
+                    placeholder = { Text("Type Your Message") },
                     shape = RoundedCornerShape(24.dp),
-                    enabled = !isLoading,
-                    maxLines = 3
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = Color(0xFF26A69A),
+                        unfocusedBorderColor = Color.LightGray,
+                        focusedContainerColor = Color.White,
+                        unfocusedContainerColor = Color.White
+                    ),
+                    maxLines = 1,
+                    singleLine = true
                 )
-
-                Button(
-                    onClick = {
-                        if (messageText.isNotBlank()) {
-                            viewModel.sendMessage(messageText)
-                            messageText = ""
-                            coroutineScope.launch {
-                                listState.animateScrollToItem(messages.size)
+                
+                // Send button with animation
+                Box {
+                    val buttonColor = if (!isLoading && messageText.isNotBlank()) 
+                        Color(0xFF26A69A) else Color(0xFFBDBDBD)
+                    
+                    IconButton(
+                        onClick = {
+                            if (messageText.isNotBlank()) {
+                                viewModel.sendMessage(messageText)
+                                messageText = ""
+                                coroutineScope.launch {
+                                    // Scroll to top after sending message
+                                    listState.animateScrollToItem(0)
+                                }
                             }
-                        }
-                    },
-                    modifier = Modifier.size(48.dp),
-                    shape = CircleShape,
-                    enabled = !isLoading && messageText.isNotBlank(),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.primary,
-                        contentColor = MaterialTheme.colorScheme.onPrimary
+                        },
+                        modifier = Modifier
+                            .size(48.dp)
+                            .background(
+                                color = buttonColor,
+                                shape = CircleShape
+                            ),
+                        enabled = !isLoading && messageText.isNotBlank()
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ArrowForward,
+                            contentDescription = "Send",
+                            tint = Color.White
+                        )
+                    }
+                }
+            }
+        }
+    }
+    
+    // History Dialog
+    if (showHistoryDialog) {
+        AlertDialog(
+            onDismissRequest = { showHistoryDialog = false },
+            title = { Text("Chat History") },
+            text = { 
+                Column {
+                    Text("Your recent conversations will appear here.")
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("This feature stores your chat history for easy access to previous conversations.")
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showHistoryDialog = false }) {
+                    Text("Close", color = Color(0xFF26A69A))
+                }
+            },
+            containerColor = Color.White,
+            titleContentColor = Color(0xFF26A69A),
+            textContentColor = Color.Black
+        )
+    }
+}
+
+@Composable
+fun AnimatedMessageBubble(message: ChatMessage) {
+    // Manage expanded state for long messages
+    var isExpanded by remember { mutableStateOf(false) }
+    
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        horizontalArrangement = if (message.isUserMessage) Arrangement.End else Arrangement.Start
+    ) {
+        Column(
+            horizontalAlignment = if (message.isUserMessage) Alignment.End else Alignment.Start
+        ) {
+            // Sender label
+            Text(
+                text = if (message.isUserMessage) "You" else "AI Assistant",
+                color = if (message.isUserMessage) Color(0xFF26A69A) else Color.Gray,
+                fontSize = 12.sp,
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+            )
+            
+            // Message bubble
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = if (message.isUserMessage) Color(0xFF26A69A) else Color(0xFFEEEEEE),
+                modifier = Modifier
+                    .widthIn(max = 280.dp)
+                    .clickable(
+                        indication = null,
+                        interactionSource = remember { MutableInteractionSource() }
+                    ) {
+                        isExpanded = !isExpanded
+                    }
+            ) {
+                if (!message.isUserMessage && message.text.contains("🤔 Thinking:") && message.text.contains("✨ Answer:")) {
+                    // Split the message into thinking and answer parts
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        val parts = message.text.split("✨ Answer:")
+                        val thinkingPart = parts[0].trim()
+                        val answerPart = if (parts.size > 1) parts[1].trim() else ""
+                        
+                        // Thinking part
+                        Text(
+                            text = thinkingPart,
+                            color = Color.Black,
+                            maxLines = if (isExpanded) Int.MAX_VALUE else 8,
+                            overflow = if (isExpanded) TextOverflow.Visible else TextOverflow.Ellipsis
+                        )
+                        
+                        // Divider
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Divider(color = Color.LightGray, thickness = 1.dp)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        
+                        // Answer part
+                        Text(
+                            text = "✨ Answer: $answerPart",
+                            color = Color.Black,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.Medium
+                        )
+                    }
+                } else {
+                    // Regular message without reasoning format
+                    Text(
+                        text = message.text,
+                        color = if (message.isUserMessage) Color.White else Color.Black,
+                        modifier = Modifier.padding(12.dp),
+                        maxLines = if (isExpanded) Int.MAX_VALUE else 12,
+                        overflow = if (isExpanded) TextOverflow.Visible else TextOverflow.Ellipsis
                     )
+                }
+            }
+            
+            // Timestamp
+            Text(
+                text = formatTimestamp(message.timestamp),
+                color = Color.Gray,
+                fontSize = 10.sp,
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+            )
+        }
+    }
+}
+
+@Composable
+fun TypingIndicator(message: ChatMessage) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.Start
+    ) {
+        Column(
+            horizontalAlignment = Alignment.Start
+        ) {
+            Text(
+                text = "AI Assistant",
+                color = Color.Gray,
+                fontSize = 12.sp,
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+            )
+            
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = Color(0xFFEEEEEE),
+                modifier = Modifier.widthIn(max = 280.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(Icons.Default.Send, contentDescription = "Send message")
+                    Text(
+                        text = "Thinking",
+                        color = Color.Black
+                    )
+                    
+                    Row {
+                        for (i in 0..2) {
+                            val delay = i * 300
+                            val infiniteTransition = rememberInfiniteTransition(label = "dot$i")
+                            val size by infiniteTransition.animateFloat(
+                                initialValue = 5f,
+                                targetValue = 8f,
+                                animationSpec = infiniteRepeatable(
+                                    animation = tween(500, delayMillis = delay),
+                                    repeatMode = RepeatMode.Reverse
+                                ), 
+                                label = "dot$i size"
+                            )
+                            
+                            Box(
+                                modifier = Modifier
+                                    .padding(horizontal = 2.dp)
+                                    .size(size.dp)
+                                    .background(Color.DarkGray, CircleShape)
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -233,91 +435,27 @@ fun ChatScreen(
 }
 
 @Composable
-fun MessageBubble(message: ChatMessage) {
-    val isError = message.text.startsWith("🚫")
-    
-    val backgroundColor = when {
-        message.isUserMessage -> MaterialTheme.colorScheme.primary
-        isError -> MaterialTheme.colorScheme.errorContainer
-        else -> MaterialTheme.colorScheme.secondaryContainer
-    }
-
-    val textColor = when {
-        message.isUserMessage -> MaterialTheme.colorScheme.onPrimary
-        isError -> MaterialTheme.colorScheme.onErrorContainer
-        else -> MaterialTheme.colorScheme.onSecondaryContainer
-    }
-
-    val bubbleShape = RoundedCornerShape(
-        topStart = if (message.isUserMessage) 16.dp else 4.dp,
-        topEnd = if (message.isUserMessage) 4.dp else 16.dp,
-        bottomStart = 16.dp,
-        bottomEnd = 16.dp
+fun PulsatingText(text: String) {
+    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
+    val scale by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 1.1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(800),
+            repeatMode = RepeatMode.Reverse
+        ), 
+        label = "pulse scale"
     )
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
-        horizontalAlignment = if (message.isUserMessage) Alignment.End else Alignment.Start
-    ) {
-        // Sender indicator
-        Text(
-            text = if (message.isUserMessage) "You" else "AI Assistant",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
-        )
-
-        // Message bubble
-        Surface(
-            modifier = Modifier
-                .widthIn(max = 300.dp)
-                .clip(bubbleShape),
-            color = backgroundColor,
-            shape = bubbleShape
-        ) {
-            Text(
-                text = message.text,
-                modifier = Modifier.padding(12.dp),
-                color = textColor,
-                style = MaterialTheme.typography.bodyLarge
-            )
-        }
-
-        // Timestamp
-        Text(
-            text = formatTimestamp(message.timestamp),
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
-        )
-    }
-}
-
-@Composable
-fun LoadingIndicator() {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(16.dp),
-        horizontalArrangement = Arrangement.Center,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        CircularProgressIndicator(
-            modifier = Modifier.size(24.dp),
-            color = MaterialTheme.colorScheme.secondary,
-            strokeWidth = 2.dp
-        )
-        Spacer(modifier = Modifier.width(8.dp))
-        Text(
-            text = "AI is thinking...",
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
+    
+    Text(
+        text = text,
+        color = Color(0xFF26A69A),
+        modifier = Modifier.scale(scale),
+        fontSize = 16.sp
+    )
 }
 
 private fun formatTimestamp(timestamp: Long): String {
     val sdf = SimpleDateFormat("HH:mm", Locale.getDefault())
     return sdf.format(Date(timestamp))
-} 
+}

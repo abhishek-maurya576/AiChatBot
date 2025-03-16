@@ -1,89 +1,86 @@
-# AIChatBot
+# AI Chat Bot Agent
 
-A modern Android chatbot application powered by Google's Gemini AI, built with Jetpack Compose and Material Design 3.
+## Overview
+AI Chat Bot Agent is a personal assistant application that integrates advanced AI capabilities with automated interaction features. The app serves as a bridge between users and their devices, allowing for efficient message sending, app control, and information retrieval through natural language commands.
 
-## Features
+## Key Features
 
-- 🤖 Powered by Google's Gemini AI API
-- 🎨 Modern UI with Material Design 3
-- 💡 Reasoning Mode for detailed AI explanations
-- 🔍 Real-time message search functionality
-- 📱 Responsive and fluid chat interface
-- 🌙 Dynamic theme support
-- 💾 Chat history persistence
-- 🔄 Context-aware conversations
+### 1. Multi-Platform Messaging
+- Send messages across multiple platforms (WhatsApp, SMS, Telegram) with simple voice or text commands
+- Automatic platform detection based on contact availability
+- Intelligent contact search and selection
 
-## Screenshots
+### 2. AI Command Processing
+- Natural language command understanding via Google's Gemini AI
+- Contextual responses based on command success/failure
+- Adaptive platform selection without explicit specification
 
-[Screenshots will be added in future releases]
+### 3. Accessibility Automation
+- Automated UI navigation and interaction
+- Text input and button clicking across applications
+- Support for complex UI flows and error handling
 
-## Tech Stack
+### 4. Visual Monitoring System
+- Floating eye widget that shows real-time operation feedback
+- Visual indicators for ongoing operations
+- Detailed operation logging and status tracking
 
-- **Language**: Kotlin
-- **UI Framework**: Jetpack Compose
-- **Architecture**: MVVM
-- **AI Integration**: Google Gemini API
-- **Async Operations**: Kotlin Coroutines & Flow
-- **UI Components**: Material Design 3
-- **Local Storage**: SharedPreferences
+## How It Works
+
+The AI Chat Bot Agent uses a combination of:
+- **Accessibility Services** to interact with other apps' UI elements
+- **Google's Gemini AI API** for natural language understanding
+- **Room Database** for persistent chat history
+- **Android Services** for background operation
 
 ## Getting Started
 
-### Prerequisites
+1. **Install the App**
+   - Download and install from Google Play or build from source
+   - Grant necessary permissions during initial setup
 
-- Android Studio Arctic Fox or later
-- Minimum SDK: 24
-- Target SDK: 34
-- Google Gemini API Key
+2. **Enable Accessibility Service**
+   - Navigate to Settings → Accessibility → AI Chat Bot Agent
+   - Toggle the service ON
 
-### Installation
+3. **Using the App**
+   - Open the AI Agent screen
+   - Type or speak your command (e.g., "Send a WhatsApp message to John saying I'll be late")
+   - The app will process your request and execute the appropriate actions
 
-1. Clone the repository:
-```bash
-git clone https://github.com/abhishek-maurya576/AiChatBot.git
-```
-
-2. Open the project in Android Studio
-
-3. Add your Gemini API key in the appropriate configuration file
-
-4. Build and run the application
-
-## Features in Detail
-
-### Reasoning Mode
-Toggle reasoning mode to get detailed explanations of AI's thought process alongside its responses.
-
-### Search Functionality
-- Real-time search through chat history
-- Search both user and AI messages
-- Highlighted search results
-
-### Chat Interface
-- Modern bubble-style messages
-- Typing indicators
-- Timestamp display
-- Error handling with visual feedback
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-## License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+4. **Monitoring Operations**
+   - Toggle the "Monitor" switch to enable the floating eye widget
+   - Watch as the app navigates through different UI elements
+   - Tap the eye to see detailed information about current operations
 
 ## Version History
 
-- v1.0.0 - Initial Release
-  - Basic chat functionality
-  - Gemini AI integration
-  - Reasoning mode
-  - Search functionality
-  - Material Design 3 UI
+### v2.0.0 (Current)
+- Added multi-platform messaging support (WhatsApp, SMS, Telegram)
+- Implemented real-time operation monitoring with visual feedback
+- Enhanced AI command understanding with Gemini API
+- Improved error handling and user feedback
+- Updated UI with Material Design components
 
-## Acknowledgments
+### v1.0.0
+- Initial release with basic WhatsApp messaging support
+- Simple command processing for sending messages
+- Basic accessibility service integration
 
-- Google Gemini AI for providing the AI capabilities
-- Jetpack Compose for the modern UI toolkit
-- Material Design 3 for the design system 
+## Permissions Required
+- Accessibility Service (for UI automation)
+- Overlay Permission (for floating eye widget)
+- Internet (for AI processing)
+- Notification Access (for operation monitoring)
+
+## Technical Documentation
+For developers interested in understanding or contributing to the project, please refer to the detailed technical documentation in the `/docs` folder.
+
+## Privacy
+This application does not collect or store any personal data beyond what is necessary for its operation. All message content is processed locally and is not transmitted to any third-party servers except for the AI processing via Google's Gemini API.
+
+## Support
+For issues, questions, or feature requests, please open an issue in this repository or contact support at support@aichatbotagent.com
+
+## License
+This project is licensed under the MIT License - see the LICENSE file for details. 
